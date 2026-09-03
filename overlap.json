@@ -1,0 +1,719 @@
+{
+ "1398": {
+  "confirmed": [
+   "1450",
+   "2012",
+   "2026"
+  ],
+  "no_gpx": false
+ },
+ "1399": {
+  "confirmed": [
+   "1451",
+   "1452",
+   "171",
+   "2013",
+   "2014"
+  ],
+  "no_gpx": false
+ },
+ "1423": {
+  "confirmed": [
+   "1397",
+   "1398",
+   "1399",
+   "1445",
+   "1446",
+   "1447",
+   "1448",
+   "1450",
+   "1451",
+   "1452",
+   "171",
+   "2011",
+   "2012",
+   "2013",
+   "2014",
+   "2026"
+  ],
+  "no_gpx": false
+ },
+ "1450": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1452": {
+  "confirmed": [
+   "171",
+   "2014"
+  ],
+  "no_gpx": false
+ },
+ "115": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "122": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "406": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "874": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "963": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1161": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1183": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1184": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1816": {
+  "confirmed": [
+   "1161",
+   "1183",
+   "1184",
+   "1187",
+   "1188",
+   "1786",
+   "1807",
+   "2015",
+   "2016",
+   "2017",
+   "2018",
+   "2019",
+   "215",
+   "406",
+   "407",
+   "599",
+   "874",
+   "963",
+   "964"
+  ],
+  "no_gpx": false
+ },
+ "291": {
+  "confirmed": [
+   "430"
+  ],
+  "no_gpx": false
+ },
+ "430": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "78": {
+  "confirmed": [
+   "76"
+  ],
+  "no_gpx": false
+ },
+ "81": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "108": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "212": {
+  "confirmed": [
+   "2073"
+  ],
+  "no_gpx": false
+ },
+ "247": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "256": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "308": {
+  "confirmed": [
+   "760"
+  ],
+  "no_gpx": false
+ },
+ "309": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "321": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "336": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "385": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "402": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "415": {
+  "confirmed": [
+   "1866"
+  ],
+  "no_gpx": false
+ },
+ "432": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "460": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "463": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "473": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "556": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "567": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "576": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "580": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "582": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "595": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "774": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "780": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "781": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "787": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "788": {
+  "confirmed": [
+   "382"
+  ],
+  "no_gpx": false
+ },
+ "792": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "793": {
+  "confirmed": [
+   "1857"
+  ],
+  "no_gpx": false
+ },
+ "796": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "801": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "816": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "817": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "820": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "835": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1695": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "362": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "860": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "73": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "171": {
+  "confirmed": [
+   "1452",
+   "2014"
+  ],
+  "no_gpx": false
+ },
+ "201": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "238": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "242": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "278": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "283": {
+  "confirmed": [
+   "282"
+  ],
+  "no_gpx": false
+ },
+ "288": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "299": {
+  "confirmed": [
+   "2138"
+  ],
+  "no_gpx": false
+ },
+ "327": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "338": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "348": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "412": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "428": {
+  "confirmed": [
+   "1466",
+   "1467",
+   "520",
+   "54",
+   "664",
+   "69"
+  ],
+  "no_gpx": false
+ },
+ "431": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "446": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "456": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "503": {
+  "confirmed": [
+   "1862"
+  ],
+  "no_gpx": false
+ },
+ "537": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "540": {
+  "confirmed": [
+   "262"
+  ],
+  "no_gpx": false
+ },
+ "547": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "589": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "664": {
+  "confirmed": [
+   "1466",
+   "69"
+  ],
+  "no_gpx": false
+ },
+ "766": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "784": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "862": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1626": {
+  "confirmed": [],
+  "no_gpx": true
+ },
+ "1857": {
+  "confirmed": [
+   "793"
+  ],
+  "no_gpx": false
+ },
+ "1861": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1864": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1865": {
+  "confirmed": [],
+  "no_gpx": true
+ },
+ "1866": {
+  "confirmed": [
+   "415"
+  ],
+  "no_gpx": false
+ },
+ "1869": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2011": {
+  "confirmed": [
+   "1397",
+   "1445",
+   "1446",
+   "1447",
+   "1448"
+  ],
+  "no_gpx": false
+ },
+ "2012": {
+  "confirmed": [
+   "1398"
+  ],
+  "no_gpx": false
+ },
+ "2013": {
+  "confirmed": [
+   "1399",
+   "1451"
+  ],
+  "no_gpx": false
+ },
+ "2014": {
+  "confirmed": [
+   "1452",
+   "171"
+  ],
+  "no_gpx": false
+ },
+ "2015": {
+  "confirmed": [
+   "1807",
+   "599",
+   "963"
+  ],
+  "no_gpx": false
+ },
+ "2016": {
+  "confirmed": [
+   "1183",
+   "1184",
+   "1187",
+   "1188"
+  ],
+  "no_gpx": false
+ },
+ "2017": {
+  "confirmed": [
+   "1161",
+   "1182",
+   "735"
+  ],
+  "no_gpx": false
+ },
+ "2019": {
+  "confirmed": [
+   "1786",
+   "406",
+   "407",
+   "874"
+  ],
+  "no_gpx": false
+ },
+ "2020": {
+  "confirmed": [
+   "1470",
+   "2092"
+  ],
+  "no_gpx": false
+ },
+ "2021": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2023": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2025": {
+  "confirmed": [
+   "155"
+  ],
+  "no_gpx": false
+ },
+ "2026": {
+  "confirmed": [
+   "1450"
+  ],
+  "no_gpx": false
+ },
+ "2161": {
+  "confirmed": [
+   "1969",
+   "2108"
+  ],
+  "no_gpx": false
+ },
+ "2184": {
+  "confirmed": [
+   "2185"
+  ],
+  "no_gpx": false
+ },
+ "2185": {
+  "confirmed": [
+   "2184"
+  ],
+  "no_gpx": false
+ },
+ "2187": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2190": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "155": {
+  "confirmed": [
+   "2025"
+  ],
+  "no_gpx": false
+ },
+ "282": {
+  "confirmed": [
+   "283"
+  ],
+  "no_gpx": false
+ },
+ "439": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1156": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1279": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2127": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2129": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2130": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2131": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2132": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2138": {
+  "confirmed": [
+   "299"
+  ],
+  "no_gpx": false
+ },
+ "2175": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1465": {
+  "confirmed": [
+   "86"
+  ],
+  "no_gpx": false
+ },
+ "1466": {
+  "confirmed": [
+   "664",
+   "69",
+   "86"
+  ],
+  "no_gpx": false
+ },
+ "1467": {
+  "confirmed": [
+   "520",
+   "54"
+  ],
+  "no_gpx": false
+ },
+ "1468": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "1469": {
+  "confirmed": [
+   "34"
+  ],
+  "no_gpx": false
+ },
+ "1470": {
+  "confirmed": [
+   "2020",
+   "2092",
+   "78"
+  ],
+  "no_gpx": false
+ },
+ "1919": {
+  "confirmed": [
+   "1644",
+   "1671",
+   "1680",
+   "1889",
+   "1969",
+   "2094",
+   "2105",
+   "2108",
+   "2113"
+  ],
+  "no_gpx": false
+ },
+ "2073": {
+  "confirmed": [
+   "212"
+  ],
+  "no_gpx": false
+ },
+ "2074": {
+  "confirmed": [
+   "2207"
+  ],
+  "no_gpx": false
+ },
+ "2076": {
+  "confirmed": [
+   "104"
+  ],
+  "no_gpx": false
+ },
+ "2077": {
+  "confirmed": [
+   "105"
+  ],
+  "no_gpx": false
+ },
+ "2079": {
+  "confirmed": [
+   "2206",
+   "48"
+  ],
+  "no_gpx": false
+ },
+ "2087": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2207": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "728": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "2204": {
+  "confirmed": [],
+  "no_gpx": false
+ },
+ "401": {
+  "confirmed": [],
+  "no_gpx": false
+ }
+}
