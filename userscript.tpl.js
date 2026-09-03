@@ -5,6 +5,8 @@
 // @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，並提供附近縣市進行中任務清單。索引產生日：__STAMP__
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
+// @updateURL    https://raw.githubusercontent.com/charles0506/hiking-biji-event-badge/master/userscript/biji-event-badge.user.js
+// @downloadURL  https://raw.githubusercontent.com/charles0506/hiking-biji-event-badge/master/userscript/biji-event-badge.user.js
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @run-at       document-idle
