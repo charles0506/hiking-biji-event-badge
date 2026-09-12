@@ -21,9 +21,11 @@
     // OV: { 長路線trailId: [實際用GPX軌跡點比對確認過、真的路過的候選trailId,...] }
     //     由 build_overlap.py 抓官方GPX算距離產生，比單純比對行政區準；
     //     沒出現在 OV 裡的長路線代表還沒算過（新爬到的、或它自己沒有官方GPX），前端退回行政區猜測法。
+    // DC: [鄉鎮市區名, 緯度, 經度][]　由 build_districts.py 查 Nominatim 產生，查不到的退回縣市中心點。
     var EV = __EV__;
     var T = __T__;
     var OV = __OV__;
+    var DC = __DC__;
 
     var TODAY = new Date().toISOString().slice(0, 10);
 
@@ -36,31 +38,29 @@
         return { label: '進行中 至' + end, cls: 'hst-live' };
     }
 
-    // ---- 台灣縣市概略中心點（給「附近任務」粗略比對用，僅本機比對，不外傳）----
-    var COUNTY_CENTER = [
-        ['台北市', 25.0330, 121.5654], ['新北市', 25.0169, 121.4628],
-        ['基隆市', 25.1276, 121.7392], ['宜蘭縣', 24.7021, 121.7378],
-        ['桃園市', 24.9936, 121.3010], ['新竹市', 24.8138, 120.9675],
-        ['新竹縣', 24.8387, 121.0177], ['苗栗縣', 24.5602, 120.8214],
-        ['台中市', 24.1477, 120.6736], ['彰化縣', 24.0518, 120.5161],
-        ['南投縣', 23.9609, 120.9718], ['雲林縣', 23.7092, 120.4313],
-        ['嘉義市', 23.4801, 120.4491], ['嘉義縣', 23.4518, 120.2555],
-        ['台南市', 22.9998, 120.2269], ['高雄市', 22.6273, 120.3014],
-        ['屏東縣', 22.5519, 120.5487], ['台東縣', 22.7583, 121.1444],
-        ['花蓮縣', 23.9871, 121.6015], ['澎湖縣', 23.5711, 119.5793],
-        ['金門縣', 24.4491, 118.3766], ['連江縣', 26.1505, 119.9297]
-    ];
-
+    // ---- 附近任務用的地點比對：鄉鎮市區層級（DC），僅本機比對，不外傳 ----
     function norm(s) { return s.replace(/臺/g, '台'); }
 
-    function nearestCounty(lat, lng) {
+    function nearestDistrict(lat, lng) {
         var best = null, bestD = Infinity;
-        COUNTY_CENTER.forEach(function (c) {
-            var dLat = c[1] - lat, dLng = c[2] - lng;
-            var d = dLat * dLat + dLng * dLng;
-            if (d < bestD) { bestD = d; best = c[0]; }
+        DC.forEach(function (d) {
+            var dLat = d[1] - lat, dLng = d[2] - lng;
+            var dist = dLat * dLat + dLng * dLng;
+            if (dist < bestD) { bestD = dist; best = d[0]; }
         });
         return best;
+    }
+
+    // 下拉選單照縣市分組（縣市名前 3 字一定固定），組內選項只顯示鄉鎮部分，短一點好選。
+    function districtGroups() {
+        var groups = {}, order = [];
+        DC.forEach(function (d) {
+            var name = d[0];
+            var county = norm(name).slice(0, 3);
+            if (!groups[county]) { groups[county] = []; order.push(county); }
+            groups[county].push(name);
+        });
+        return order.map(function (county) { return [county, groups[county]]; });
     }
 
     // ---- CSS ----
@@ -264,23 +264,33 @@
         return rows;
     }
 
-    // 地區用下拉選單自己選，不強迫用定位——選了就記住，下次開面板直接帶出來。
-    // 想用定位也行，面板裡有顆 📍 按鈕，按了才問權限，不會一開面板就跳定位提示。
-    function showNearbyPanel(initialCounty) {
+    // 地區用下拉選單自己選（照縣市分組，組內是鄉鎮），不強迫用定位——
+    // 選了就記住，下次開面板直接帶出來。想用定位也行，面板裡有顆 📍 按鈕，
+    // 按了才問權限，不會一開面板就跳定位提示。
+    function buildDistrictOptions(selected) {
+        return districtGroups().map(function (g) {
+            var county = g[0], names = g[1];
+            var opts = names.map(function (name) {
+                var label = name.indexOf(county) === 0 ? name.slice(county.length) : name;
+                if (!label) label = name; // 純縣市層級（沒有鄉鎮後綴）的條目
+                var sel = name === selected ? ' selected' : '';
+                return '<option value="' + name + '"' + sel + '>' + label + '</option>';
+            }).join('');
+            return '<optgroup label="' + county + '">' + opts + '</optgroup>';
+        }).join('');
+    }
+
+    function showNearbyPanel(initialDistrict) {
         var old = document.getElementById('hpanel-nearby');
         if (old) old.remove();
         var panel = document.createElement('div');
         panel.id = 'hpanel-nearby';
 
-        var options = '<option value="">請選擇地區…</option>' + COUNTY_CENTER.map(function (c) {
-            var sel = c[0] === initialCounty ? ' selected' : '';
-            return '<option value="' + c[0] + '"' + sel + '>' + c[0] + '</option>';
-        }).join('');
-
         panel.innerHTML =
             '<span class="hp-close">✕</span><h3>附近任務</h3>' +
             '<div class="hp-controls">' +
-            '<select id="hp-county-select">' + options + '</select>' +
+            '<select id="hp-district-select"><option value="">請選擇鄉鎮市區…</option>' +
+            buildDistrictOptions(initialDistrict) + '</select>' +
             '<button type="button" id="hp-locate" title="用瀏覽器定位自動選地區">📍</button>' +
             '</div>' +
             '<div id="hp-body"></div>';
@@ -288,16 +298,16 @@
         panel.querySelector('.hp-close').addEventListener('click', function () { panel.remove(); });
 
         var body = panel.querySelector('#hp-body');
-        var select = panel.querySelector('#hp-county-select');
+        var select = panel.querySelector('#hp-district-select');
 
-        function renderList(county) {
-            if (!county) {
-                body.innerHTML = '<div>選個地區，或按右邊 📍 用目前位置。</div>';
+        function renderList(district) {
+            if (!district) {
+                body.innerHTML = '<div>選個鄉鎮市區，或按右邊 📍 用目前位置。</div>';
                 return;
             }
-            var list = findNearbyTrails(county);
+            var list = findNearbyTrails(district);
             if (!list.length) {
-                body.innerHTML = '<div>' + county + ' 目前沒有進行中的活動路線。</div>';
+                body.innerHTML = '<div>' + district + ' 目前沒有進行中的活動路線。</div>';
                 return;
             }
             body.innerHTML = list.map(function (r) {
@@ -307,7 +317,7 @@
         }
 
         select.addEventListener('change', function () {
-            try { GM_setValue('hbiji_last_county', select.value); } catch (e) {}
+            try { GM_setValue('hbiji_last_place', select.value); } catch (e) {}
             renderList(select.value);
         });
 
@@ -318,16 +328,16 @@
             }
             body.innerHTML = '<div>定位中…</div>';
             navigator.geolocation.getCurrentPosition(function (pos) {
-                var county = nearestCounty(pos.coords.latitude, pos.coords.longitude);
-                select.value = county;
-                try { GM_setValue('hbiji_last_county', county); } catch (e) {}
-                renderList(county);
+                var district = nearestDistrict(pos.coords.latitude, pos.coords.longitude);
+                select.value = district;
+                try { GM_setValue('hbiji_last_place', district); } catch (e) {}
+                renderList(district);
             }, function (err) {
                 body.innerHTML = '<div>定位失敗（' + err.message + '），手動選地區即可。</div>';
             }, { timeout: 8000 });
         });
 
-        renderList(initialCounty);
+        renderList(initialDistrict);
     }
 
     function initNearbyButton() {
@@ -337,7 +347,7 @@
         btn.textContent = '📍 附近任務';
         btn.addEventListener('click', function () {
             var last = null;
-            try { last = GM_getValue('hbiji_last_county', null); } catch (e) {}
+            try { last = GM_getValue('hbiji_last_place', null); } catch (e) {}
             showNearbyPanel(last || '');
         });
         document.body.appendChild(btn);
