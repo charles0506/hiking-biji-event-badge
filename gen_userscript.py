@@ -16,16 +16,35 @@ OUT_LIVE = r"D:\claudeD\firefox\biji-event-badge\biji-event-badge.user.js"
 OUT_REPO = os.path.join(HERE, "userscript", "biji-event-badge.user.js")
 
 # 每個「活動」（任務類型）固定配一個顏色，用活動 id 取模決定，不用陣列位置
-# ——活動清單改順序、增減都不會讓既有活動的顏色跳來跳去。挑的都是白字看得清楚的中彩度色。
-COLOR_PALETTE = [
-    "#2e9e5b", "#3577c9", "#d35400", "#8e44ad", "#c0392b",
-    "#16a085", "#b7950b", "#34495e", "#2980b9", "#27ae60",
-    "#a04000", "#6c3483", "#117864", "#922b21", "#7d6608",
-    "#1a5276", "#af601a", "#4a235a", "#0e6655", "#78281f",
-    "#1e8449", "#2471a3", "#ca6f1e", "#7d3c98", "#b03a2e",
-    "#138d75", "#9a7d0a", "#5d6d7e", "#1f618d", "#229954",
-    "#873600", "#5b2c6f", "#0b5345", "#943126", "#7e5109",
-]  # 35 色，35 個活動以內都能拿到獨一無二的顏色
+# ——活動清單改順序、增減都不會讓既有活動的顏色跳來跳去。
+#
+# 舊版是手挑一堆深棕/暗紅色系 hex，彩度深淺不一致，好幾個顏色看起來都很像同一種「暗紅棕」。
+# 改成程式產生：色相在色輪上平均分布（每個顏色差 360/N 度），飽和度/明度固定，
+# 保證彼此拉開視覺差異，同時深到白字仍看得清楚。
+def _hsl_to_hex(h, s, l):
+    c = (1 - abs(2 * l - 1)) * s
+    x = c * (1 - abs((h / 60.0) % 2 - 1))
+    m = l - c / 2
+    if h < 60:
+        r, g, b = c, x, 0
+    elif h < 120:
+        r, g, b = x, c, 0
+    elif h < 180:
+        r, g, b = 0, c, x
+    elif h < 240:
+        r, g, b = 0, x, c
+    elif h < 300:
+        r, g, b = x, 0, c
+    else:
+        r, g, b = c, 0, x
+    return "#%02x%02x%02x" % (round((r + m) * 255), round((g + m) * 255), round((b + m) * 255))
+
+
+def _make_palette(n=24, s=0.68, l=0.40):
+    return [_hsl_to_hex((360.0 * i) / n, s, l) for i in range(n)]
+
+
+COLOR_PALETTE = _make_palette()
 
 
 def assign_colors(activity_ids):

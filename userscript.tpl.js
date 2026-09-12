@@ -89,6 +89,11 @@
         '#hpanel-nearby a{color:#1a6fd1;text-decoration:none}' +
         '#hpanel-nearby a:hover{text-decoration:underline}' +
         '#hpanel-nearby .hp-close{float:right;cursor:pointer;color:#888}' +
+        '#hpanel-nearby .hp-controls{display:flex;gap:6px;margin:6px 0 8px}' +
+        '#hp-county-select{flex:1;padding:4px 6px;font-size:13px}' +
+        '#hp-locate{flex:0 0 auto;padding:4px 8px;cursor:pointer;' +
+        'border:1px solid #ccc;border-radius:4px;background:#f5f5f5}' +
+        '#hp-locate:hover{background:#eee}' +
         '.hoverlap{margin:6px 0;font-size:13px;border:1px solid #e0e0e0;' +
         'border-radius:6px;padding:4px 8px;max-width:640px}' +
         '.hoverlap summary{cursor:pointer;color:#555;padding:4px 0}' +
@@ -259,27 +264,70 @@
         return rows;
     }
 
-    function showNearbyPanel(county, statusMsg) {
+    // 地區用下拉選單自己選，不強迫用定位——選了就記住，下次開面板直接帶出來。
+    // 想用定位也行，面板裡有顆 📍 按鈕，按了才問權限，不會一開面板就跳定位提示。
+    function showNearbyPanel(initialCounty) {
         var old = document.getElementById('hpanel-nearby');
         if (old) old.remove();
         var panel = document.createElement('div');
         panel.id = 'hpanel-nearby';
-        var html = '<span class="hp-close">✕</span><h3>附近任務：' + (county || '未知') + '</h3>';
-        if (statusMsg) {
-            html += '<div>' + statusMsg + '</div>';
-        } else {
-            var list = findNearbyTrails(county);
-            if (!list.length) {
-                html += '<div>' + county + ' 目前沒有進行中的活動路線。</div>';
-            } else {
-                list.forEach(function (r) {
-                    html += '<div class="hp-item"><a href="' + r.url + '" target="_blank" rel="noopener">' + r.name + '</a><br><small>' + r.evs.join('、') + '</small></div>';
-                });
-            }
-        }
-        panel.innerHTML = html;
+
+        var options = '<option value="">請選擇地區…</option>' + COUNTY_CENTER.map(function (c) {
+            var sel = c[0] === initialCounty ? ' selected' : '';
+            return '<option value="' + c[0] + '"' + sel + '>' + c[0] + '</option>';
+        }).join('');
+
+        panel.innerHTML =
+            '<span class="hp-close">✕</span><h3>附近任務</h3>' +
+            '<div class="hp-controls">' +
+            '<select id="hp-county-select">' + options + '</select>' +
+            '<button type="button" id="hp-locate" title="用瀏覽器定位自動選地區">📍</button>' +
+            '</div>' +
+            '<div id="hp-body"></div>';
         document.body.appendChild(panel);
         panel.querySelector('.hp-close').addEventListener('click', function () { panel.remove(); });
+
+        var body = panel.querySelector('#hp-body');
+        var select = panel.querySelector('#hp-county-select');
+
+        function renderList(county) {
+            if (!county) {
+                body.innerHTML = '<div>選個地區，或按右邊 📍 用目前位置。</div>';
+                return;
+            }
+            var list = findNearbyTrails(county);
+            if (!list.length) {
+                body.innerHTML = '<div>' + county + ' 目前沒有進行中的活動路線。</div>';
+                return;
+            }
+            body.innerHTML = list.map(function (r) {
+                return '<div class="hp-item"><a href="' + r.url + '" target="_blank" rel="noopener">' + r.name +
+                    '</a><br><small>' + r.evs.join('、') + '</small></div>';
+            }).join('');
+        }
+
+        select.addEventListener('change', function () {
+            try { GM_setValue('hbiji_last_county', select.value); } catch (e) {}
+            renderList(select.value);
+        });
+
+        panel.querySelector('#hp-locate').addEventListener('click', function () {
+            if (!navigator.geolocation) {
+                body.innerHTML = '<div>瀏覽器不支援定位，手動選地區即可。</div>';
+                return;
+            }
+            body.innerHTML = '<div>定位中…</div>';
+            navigator.geolocation.getCurrentPosition(function (pos) {
+                var county = nearestCounty(pos.coords.latitude, pos.coords.longitude);
+                select.value = county;
+                try { GM_setValue('hbiji_last_county', county); } catch (e) {}
+                renderList(county);
+            }, function (err) {
+                body.innerHTML = '<div>定位失敗（' + err.message + '），手動選地區即可。</div>';
+            }, { timeout: 8000 });
+        });
+
+        renderList(initialCounty);
     }
 
     function initNearbyButton() {
@@ -288,20 +336,9 @@
         btn.id = 'hbtn-nearby';
         btn.textContent = '📍 附近任務';
         btn.addEventListener('click', function () {
-            if (!navigator.geolocation) {
-                showNearbyPanel('', '瀏覽器不支援定位。');
-                return;
-            }
-            showNearbyPanel('', '定位中…');
-            navigator.geolocation.getCurrentPosition(function (pos) {
-                var county = nearestCounty(pos.coords.latitude, pos.coords.longitude);
-                try { GM_setValue('hbiji_last_county', county); } catch (e) {}
-                showNearbyPanel(county);
-            }, function (err) {
-                var last = null;
-                try { last = GM_getValue('hbiji_last_county', null); } catch (e) {}
-                showNearbyPanel(last || '', '定位失敗（' + err.message + '）。已標出頁面上有活動的路線，自行比對縣市。');
-            }, { timeout: 8000 });
+            var last = null;
+            try { last = GM_getValue('hbiji_last_county', null); } catch (e) {}
+            showNearbyPanel(last || '');
         });
         document.body.appendChild(btn);
     }
