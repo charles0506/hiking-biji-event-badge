@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.18
-// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁上「去過此路線」的完成狀態。索引產生日：2026-09-16
+// @version      1.0.19
+// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-16
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
 // @updateURL    https://raw.githubusercontent.com/charles0506/hiking-biji-event-badge/master/userscript/biji-event-badge.user.js
@@ -414,7 +414,7 @@
             var trailId = btn.getAttribute('data-id');
             var span = btn.querySelector('span');
             var icon = btn.querySelector('i');
-            var done = isVisitedNode(span, icon);
+            var buttonDone = isVisitedNode(span, icon);
 
             var itemInfo = wrap.closest('.item-info') || wrap.parentElement;
             var titleLink = itemInfo ? itemInfo.querySelector('a.title') : null;
@@ -424,6 +424,10 @@
             var city = cityEl ? cityEl.textContent.trim() : '';
 
             var prev = db[trailId] || {};
+            // 按鈕狀態是本頁當下最準的來源；「軌跡判斷已去過」是輔助訊號，兩者只加不減——
+            // 已經由 GPX 認過的路線，就算這次按鈕還沒點，也不要把 doneGpx 蓋掉。
+            var gpxDone = !!prev.doneGpx;
+            var done = buttonDone || gpxDone;
             var mss = {};
             (prev.minisites || []).forEach(function (m) { mss[m] = true; });
             if (minisiteId) mss[minisiteId + ':' + minisiteTitle] = true;
@@ -432,15 +436,17 @@
                 url: url || prev.url,
                 city: city || prev.city,
                 done: done,
+                doneGpx: gpxDone,
                 lastSeen: new Date().toISOString(),
                 minisites: Object.keys(mss)
             };
             changed = true;
 
             if (!itemInfo) return;
-            if (itemInfo.dataset.hvtDone === (done ? '1' : '0')) return; // 狀態沒變就不重插 chip，避免 MutationObserver 迴圈
-            itemInfo.dataset.hvtDone = done ? '1' : '0';
-            itemInfo.style.borderLeft = done ? '4px solid #2e9e5b' : '4px solid #c62828';
+            var stateKey = buttonDone ? 'btn' : (gpxDone ? 'gpx' : 'none');
+            if (itemInfo.dataset.hvtDone === stateKey) return; // 狀態沒變就不重插 chip，避免 MutationObserver 迴圈
+            itemInfo.dataset.hvtDone = stateKey;
+            itemInfo.style.borderLeft = buttonDone ? '4px solid #2e9e5b' : (gpxDone ? '4px solid #1a6fd1' : '4px solid #c62828');
             itemInfo.style.paddingLeft = '8px';
             var chip = itemInfo.querySelector('.hvt-chip');
             if (!chip) {
@@ -448,8 +454,66 @@
                 chip.className = 'hvt-chip';
                 itemInfo.insertBefore(chip, itemInfo.firstChild);
             }
-            chip.textContent = done ? '✅ 已去過' : '⬜ 未去過';
-            chip.style.background = done ? '#2e9e5b' : '#9e9e9e';
+            chip.title = gpxDone && !buttonDone ? '你上傳過符合這條路線的軌跡，但站上「去過此路線」還沒點' : '';
+            chip.textContent = buttonDone ? '✅ 已去過' : (gpxDone ? '🛰️ 軌跡顯示已去過' : '⬜ 未去過');
+            chip.style.background = buttonDone ? '#2e9e5b' : (gpxDone ? '#1a6fd1' : '#9e9e9e');
+        });
+
+        if (changed) saveVisitedDB(db);
+    }
+
+    // ---- 「我的軌跡」頁：用自己上傳過的 GPX 記錄反推「已去過」----
+    // 軌跡標題是站上自動組出來的「活動名+路線名+時間戳」，中間沒有分隔符，
+    // 用已知活動名清單去掉字首、再去掉結尾 12 碼時間戳，剩下拿去對 T 的路線名清單找 id。
+    // 只在看得到「刪除」按鈕（.btn_remove）時才掃——代表在看自己的軌跡列表，
+    // 不會把別人分享頁上的軌跡誤算成自己去過。
+    var EV_BY_NAME_DESC = EV.map(function (ev, i) { return { name: ev[0], idx: i }; })
+        .sort(function (a, b) { return b.name.length - a.name.length; });
+    var T_NAME_INDEX = null;
+    function trailIdByName(name) {
+        if (!T_NAME_INDEX) {
+            T_NAME_INDEX = {};
+            Object.keys(T).forEach(function (id) { T_NAME_INDEX[T[id][0]] = id; });
+        }
+        return T_NAME_INDEX[name];
+    }
+
+    function scanMyGpxPage() {
+        var qs = new URLSearchParams(location.search);
+        if (qs.get('q') !== 'member' || qs.get('act') !== 'gpx') return;
+        if (!document.querySelector('.btn_remove')) return; // 不是自己的軌跡列表，不猜
+
+        var items = document.querySelectorAll('li.member-ugc-item');
+        if (!items.length) return;
+        var db = loadVisitedDB();
+        var changed = false;
+
+        items.forEach(function (li) {
+            var titleLink = li.querySelector('a.truncate');
+            if (!titleLink) return;
+            var full = titleLink.textContent.trim();
+            var remainder = full.replace(/\d{12}$/, '');
+            var evMatch = null;
+            for (var i = 0; i < EV_BY_NAME_DESC.length; i++) {
+                if (remainder.indexOf(EV_BY_NAME_DESC[i].name) === 0) { evMatch = EV_BY_NAME_DESC[i]; break; }
+            }
+            if (!evMatch) return;
+            var routeName = remainder.slice(evMatch.name.length);
+            var trailId = trailIdByName(routeName);
+            if (!trailId) return;
+
+            var prev = db[trailId] || {};
+            if (prev.doneGpx) return; // 已經標過，不用重存也不用觸發 changed
+            db[trailId] = {
+                title: prev.title || routeName,
+                url: prev.url || (T[trailId] ? T[trailId][2] : null),
+                city: prev.city || (T[trailId] ? T[trailId][1] : ''),
+                done: true,
+                doneGpx: true,
+                lastSeen: prev.lastSeen || new Date().toISOString(),
+                minisites: prev.minisites || []
+            };
+            changed = true;
         });
 
         if (changed) saveVisitedDB(db);
@@ -503,7 +567,7 @@
             }).sort(function (a, b) { return (a.title || '').localeCompare(b.title || '', 'zh-Hant'); });
             var doneCount = rows.filter(function (r) { return r.done; }).length;
             panel.querySelector('#hv-summary').textContent =
-                '逛過的寶石任務頁共收錄 ' + rows.length + ' 條路線，已去過 ' + doneCount + ' 條';
+                '收錄 ' + rows.length + ' 條路線，已去過 ' + doneCount + ' 條（逛過的寶石任務頁 + 我的軌跡自動比對）';
             var list = panel.querySelector('#hv-list');
             list.innerHTML = '';
             rows
@@ -513,8 +577,9 @@
                     var row = document.createElement('div');
                     row.className = 'hv-row';
                     var msNames = (r.minisites || []).map(function (m) { return m.split(':').slice(1).join(':'); }).join('、');
+                    var mark = r.done ? (r.doneGpx ? '✅🛰️' : '✅') : '⬜';
                     row.innerHTML =
-                        (r.done ? '✅' : '⬜') + ' <a href="' + (r.url || '#') + '" target="_blank" rel="noopener">' +
+                        mark + ' <a href="' + (r.url || '#') + '" target="_blank" rel="noopener">' +
                         r.title + '</a><br><small>' + (r.city || '') +
                         (msNames ? '｜來自：' + msNames : '') + '</small>';
                     list.appendChild(row);
@@ -539,6 +604,7 @@
         tagLinksOnPage(isGpxDetail);
         initNearbyButton();
         scanVisitedCards();
+        scanMyGpxPage();
         initVisitedButton();
     }
 
