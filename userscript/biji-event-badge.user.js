@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.17
-// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，並提供附近縣市進行中任務清單。索引產生日：2026-09-12
+// @version      1.0.18
+// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁上「去過此路線」的完成狀態。索引產生日：2026-09-16
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
 // @updateURL    https://raw.githubusercontent.com/charles0506/hiking-biji-event-badge/master/userscript/biji-event-badge.user.js
@@ -100,7 +100,30 @@
         '.hoverlap-list{margin-top:4px;padding-top:4px;border-top:1px solid #eee}' +
         '.hoverlap-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:3px 0}' +
         '.hoverlap-row>a{color:#1a6fd1;text-decoration:none;flex:0 0 auto}' +
-        '.hoverlap-row>a:hover{text-decoration:underline}';
+        '.hoverlap-row>a:hover{text-decoration:underline}' +
+        // ---- 寶石任務頁「去過此路線」狀態彙整（hvt = hiking visited tracker）----
+        // 浮動按鈕放左下角，跟右下角的「附近任務」分開，兩個面板不會疊在一起。
+        '.hvt-chip{display:inline-block;font-size:11px;font-weight:bold;padding:1px 7px;' +
+        'border-radius:9px;margin-bottom:3px;color:#fff}' +
+        '#hbtn-visited{position:fixed;left:18px;bottom:18px;z-index:99999;' +
+        'background:#1a6fd1;color:#fff;border:none;border-radius:24px;' +
+        'padding:10px 16px;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer}' +
+        '#hpanel-visited{position:fixed;left:18px;bottom:70px;z-index:99999;width:340px;' +
+        'max-height:70vh;overflow:auto;background:#fff;color:#222;border-radius:8px;' +
+        'box-shadow:0 4px 16px rgba(0,0,0,.35);padding:10px;font-size:13px}' +
+        '#hpanel-visited h3{margin:0 0 6px;font-size:14px}' +
+        '#hpanel-visited .hp-close{float:right;cursor:pointer;color:#888}' +
+        '#hpanel-visited .hv-tools{display:flex;gap:6px;margin:6px 0 8px;flex-wrap:wrap}' +
+        '#hpanel-visited .hv-tools button{padding:4px 8px;cursor:pointer;' +
+        'border:1px solid #ccc;border-radius:4px;background:#f5f5f5;font-size:12px}' +
+        '#hpanel-visited .hv-tools button.active{background:#1a6fd1;color:#fff;border-color:#1a6fd1}' +
+        '#hpanel-visited .hv-tools input{flex:1;min-width:110px;padding:4px 6px;' +
+        'border:1px solid #ccc;border-radius:4px}' +
+        '#hv-summary{color:#666;margin-bottom:6px}' +
+        '.hv-row{padding:5px 0;border-top:1px solid #eee}' +
+        '.hv-row a{color:#1a6fd1;text-decoration:none}' +
+        '.hv-row a:hover{text-decoration:underline}' +
+        '.hv-row small{color:#888}';
     document.head.appendChild(style);
 
     // trailUrl 給了：徽章直接連去「這條步道」本身（列表頁用，點了不用再往下滑找）。
@@ -353,12 +376,170 @@
         document.body.appendChild(btn);
     }
 
+    // ---- 寶石任務頁「去過此路線」狀態彙整 ----
+    // 這個按鈕只出現在寶石任務頁（q=minisite&id=NNN）的路線清單上，未登入點下去
+    // 是導去登入頁；登入後真正點擊會由站上自己的 AJAX 處理，這裡完全不碰那個
+    // 請求，只讀 DOM 目前顯示的文字/圖示狀態，彙整成清單方便跨頁查看。
+    var VISITED_DB_KEY = 'hbiji_visited_db';
+    var VISITED_DONE_HINTS = ['已去過', '已完成', '已走過'];
+
+    function loadVisitedDB() {
+        try { return GM_getValue(VISITED_DB_KEY, {}); } catch (e) { return {}; }
+    }
+    function saveVisitedDB(db) {
+        try { GM_setValue(VISITED_DB_KEY, db); } catch (e) {}
+    }
+
+    function isVisitedNode(span, icon) {
+        var text = (span && span.textContent || '').trim();
+        if (VISITED_DONE_HINTS.some(function (h) { return text.indexOf(h) !== -1; })) return true;
+        var iconText = (icon && icon.textContent || '').trim();
+        // 未去過固定用 flag 圖示；換成別的圖示（打勾之類）視為已去過
+        if (iconText && iconText !== 'flag') return true;
+        return false;
+    }
+
+    function scanVisitedCards() {
+        var wraps = document.querySelectorAll('.func-wrap');
+        if (!wraps.length) return;
+        var qs = new URLSearchParams(location.search);
+        var minisiteId = qs.get('id');
+        var minisiteTitle = document.title.replace(/\s*-\s*健行筆記\s*$/, '').trim();
+        var db = loadVisitedDB();
+        var changed = false;
+
+        wraps.forEach(function (wrap) {
+            var btn = wrap.querySelector('.func_btn[data-id]');
+            if (!btn) return;
+            var trailId = btn.getAttribute('data-id');
+            var span = btn.querySelector('span');
+            var icon = btn.querySelector('i');
+            var done = isVisitedNode(span, icon);
+
+            var itemInfo = wrap.closest('.item-info') || wrap.parentElement;
+            var titleLink = itemInfo ? itemInfo.querySelector('a.title') : null;
+            var title = titleLink ? titleLink.textContent.trim() : (span ? span.textContent.trim() : trailId);
+            var url = titleLink ? new URL(titleLink.getAttribute('href'), location.origin).href : null;
+            var cityEl = itemInfo ? itemInfo.querySelector('.city') : null;
+            var city = cityEl ? cityEl.textContent.trim() : '';
+
+            var prev = db[trailId] || {};
+            var mss = {};
+            (prev.minisites || []).forEach(function (m) { mss[m] = true; });
+            if (minisiteId) mss[minisiteId + ':' + minisiteTitle] = true;
+            db[trailId] = {
+                title: title || prev.title,
+                url: url || prev.url,
+                city: city || prev.city,
+                done: done,
+                lastSeen: new Date().toISOString(),
+                minisites: Object.keys(mss)
+            };
+            changed = true;
+
+            if (!itemInfo) return;
+            if (itemInfo.dataset.hvtDone === (done ? '1' : '0')) return; // 狀態沒變就不重插 chip，避免 MutationObserver 迴圈
+            itemInfo.dataset.hvtDone = done ? '1' : '0';
+            itemInfo.style.borderLeft = done ? '4px solid #2e9e5b' : '4px solid #c62828';
+            itemInfo.style.paddingLeft = '8px';
+            var chip = itemInfo.querySelector('.hvt-chip');
+            if (!chip) {
+                chip = document.createElement('span');
+                chip.className = 'hvt-chip';
+                itemInfo.insertBefore(chip, itemInfo.firstChild);
+            }
+            chip.textContent = done ? '✅ 已去過' : '⬜ 未去過';
+            chip.style.background = done ? '#2e9e5b' : '#9e9e9e';
+        });
+
+        if (changed) saveVisitedDB(db);
+    }
+
+    function showVisitedPanel() {
+        var old = document.getElementById('hpanel-visited');
+        if (old) { old.remove(); return; }
+        var panel = document.createElement('div');
+        panel.id = 'hpanel-visited';
+        panel.innerHTML =
+            '<span class="hp-close">✕</span><h3>寶石任務去過紀錄</h3>' +
+            '<div id="hv-summary"></div>' +
+            '<div class="hv-tools">' +
+            '<button type="button" data-f="all" class="active">全部</button>' +
+            '<button type="button" data-f="done">已去過</button>' +
+            '<button type="button" data-f="todo">未去過</button>' +
+            '<input id="hv-search" placeholder="搜尋路線名稱…">' +
+            '<button type="button" id="hv-export">匯出 JSON</button>' +
+            '</div>' +
+            '<div id="hv-list"></div>';
+        document.body.appendChild(panel);
+        panel.querySelector('.hp-close').addEventListener('click', function () { panel.remove(); });
+        panel.querySelector('#hv-export').addEventListener('click', function () {
+            var blob = new Blob([JSON.stringify(loadVisitedDB(), null, 2)], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'hiking-biji-visited.json';
+            a.click();
+        });
+
+        var filter = 'all', keyword = '';
+        panel.querySelectorAll('.hv-tools button[data-f]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                filter = btn.getAttribute('data-f');
+                panel.querySelectorAll('.hv-tools button[data-f]').forEach(function (b) {
+                    b.classList.toggle('active', b === btn);
+                });
+                render();
+            });
+        });
+        panel.querySelector('#hv-search').addEventListener('input', function (e) {
+            keyword = e.target.value.trim();
+            render();
+        });
+
+        function render() {
+            var db = loadVisitedDB();
+            var rows = Object.keys(db).map(function (id) {
+                var r = db[id]; r.id = id; return r;
+            }).sort(function (a, b) { return (a.title || '').localeCompare(b.title || '', 'zh-Hant'); });
+            var doneCount = rows.filter(function (r) { return r.done; }).length;
+            panel.querySelector('#hv-summary').textContent =
+                '逛過的寶石任務頁共收錄 ' + rows.length + ' 條路線，已去過 ' + doneCount + ' 條';
+            var list = panel.querySelector('#hv-list');
+            list.innerHTML = '';
+            rows
+                .filter(function (r) { return filter === 'done' ? r.done : filter === 'todo' ? !r.done : true; })
+                .filter(function (r) { return !keyword || (r.title || '').indexOf(keyword) !== -1; })
+                .forEach(function (r) {
+                    var row = document.createElement('div');
+                    row.className = 'hv-row';
+                    var msNames = (r.minisites || []).map(function (m) { return m.split(':').slice(1).join(':'); }).join('、');
+                    row.innerHTML =
+                        (r.done ? '✅' : '⬜') + ' <a href="' + (r.url || '#') + '" target="_blank" rel="noopener">' +
+                        r.title + '</a><br><small>' + (r.city || '') +
+                        (msNames ? '｜來自：' + msNames : '') + '</small>';
+                    list.appendChild(row);
+                });
+        }
+        render();
+    }
+
+    function initVisitedButton() {
+        if (document.getElementById('hbtn-visited')) return;
+        var btn = document.createElement('button');
+        btn.id = 'hbtn-visited';
+        btn.textContent = '✅ 去過紀錄';
+        btn.addEventListener('click', showVisitedPanel);
+        document.body.appendChild(btn);
+    }
+
     function run() {
         var qs = new URLSearchParams(location.search);
         var isGpxDetail = qs.get('q') === 'trail' && qs.get('act') === 'gpx_detail';
         tagDetailPage();
         tagLinksOnPage(isGpxDetail);
         initNearbyButton();
+        scanVisitedCards();
+        initVisitedButton();
     }
 
     run();
