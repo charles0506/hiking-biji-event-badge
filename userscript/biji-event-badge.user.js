@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.19
+// @version      1.0.20
 // @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-16
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
@@ -424,10 +424,10 @@
             var city = cityEl ? cityEl.textContent.trim() : '';
 
             var prev = db[trailId] || {};
-            // 按鈕狀態是本頁當下最準的來源；「軌跡判斷已去過」是輔助訊號，兩者只加不減——
-            // 已經由 GPX 認過的路線，就算這次按鈕還沒點，也不要把 doneGpx 蓋掉。
+            // GPX 軌跡才是準的——「去過此路線」按鈕是自己手動點的，點過不代表真的去過、
+            // 沒點也不代表沒去過，不能當作真正的「已去過」依據，只能當參考/提醒用。
             var gpxDone = !!prev.doneGpx;
-            var done = buttonDone || gpxDone;
+            var done = gpxDone;
             var mss = {};
             (prev.minisites || []).forEach(function (m) { mss[m] = true; });
             if (minisiteId) mss[minisiteId + ':' + minisiteTitle] = true;
@@ -437,16 +437,17 @@
                 city: city || prev.city,
                 done: done,
                 doneGpx: gpxDone,
+                doneButton: buttonDone,
                 lastSeen: new Date().toISOString(),
                 minisites: Object.keys(mss)
             };
             changed = true;
 
             if (!itemInfo) return;
-            var stateKey = buttonDone ? 'btn' : (gpxDone ? 'gpx' : 'none');
+            var stateKey = gpxDone ? 'gpx' : (buttonDone ? 'btn-only' : 'none');
             if (itemInfo.dataset.hvtDone === stateKey) return; // 狀態沒變就不重插 chip，避免 MutationObserver 迴圈
             itemInfo.dataset.hvtDone = stateKey;
-            itemInfo.style.borderLeft = buttonDone ? '4px solid #2e9e5b' : (gpxDone ? '4px solid #1a6fd1' : '4px solid #c62828');
+            itemInfo.style.borderLeft = gpxDone ? '4px solid #2e9e5b' : (buttonDone ? '4px dashed #e0a300' : '4px solid #c62828');
             itemInfo.style.paddingLeft = '8px';
             var chip = itemInfo.querySelector('.hvt-chip');
             if (!chip) {
@@ -454,9 +455,10 @@
                 chip.className = 'hvt-chip';
                 itemInfo.insertBefore(chip, itemInfo.firstChild);
             }
-            chip.title = gpxDone && !buttonDone ? '你上傳過符合這條路線的軌跡，但站上「去過此路線」還沒點' : '';
-            chip.textContent = buttonDone ? '✅ 已去過' : (gpxDone ? '🛰️ 軌跡顯示已去過' : '⬜ 未去過');
-            chip.style.background = buttonDone ? '#2e9e5b' : (gpxDone ? '#1a6fd1' : '#9e9e9e');
+            chip.title = gpxDone ? '你上傳過符合這條路線的軌跡' :
+                (buttonDone ? '站上按鈕顯示已去過，但目前掃不到對應的軌跡紀錄（可能沒上傳，或還沒開過「我的軌跡」頁讓腳本掃過）' : '');
+            chip.textContent = gpxDone ? '✅ 已去過（軌跡佐證）' : (buttonDone ? '⚠️ 按鈕標記，無軌跡' : '⬜ 未去過');
+            chip.style.background = gpxDone ? '#2e9e5b' : (buttonDone ? '#e0a300' : '#9e9e9e');
         });
 
         if (changed) saveVisitedDB(db);
@@ -510,6 +512,7 @@
                 city: prev.city || (T[trailId] ? T[trailId][1] : ''),
                 done: true,
                 doneGpx: true,
+                doneButton: prev.doneButton || false,
                 lastSeen: prev.lastSeen || new Date().toISOString(),
                 minisites: prev.minisites || []
             };
@@ -525,12 +528,13 @@
         var panel = document.createElement('div');
         panel.id = 'hpanel-visited';
         panel.innerHTML =
-            '<span class="hp-close">✕</span><h3>寶石任務去過紀錄</h3>' +
+            '<span class="hp-close">✕</span><h3>去過紀錄（以軌跡為準）</h3>' +
             '<div id="hv-summary"></div>' +
             '<div class="hv-tools">' +
             '<button type="button" data-f="all" class="active">全部</button>' +
-            '<button type="button" data-f="done">已去過</button>' +
-            '<button type="button" data-f="todo">未去過</button>' +
+            '<button type="button" data-f="done">✅ 已去過</button>' +
+            '<button type="button" data-f="flag">⚠️ 按鈕標記無軌跡</button>' +
+            '<button type="button" data-f="todo">⬜ 未去過</button>' +
             '<input id="hv-search" placeholder="搜尋路線名稱…">' +
             '<button type="button" id="hv-export">匯出 JSON</button>' +
             '</div>' +
@@ -566,18 +570,25 @@
                 var r = db[id]; r.id = id; return r;
             }).sort(function (a, b) { return (a.title || '').localeCompare(b.title || '', 'zh-Hant'); });
             var doneCount = rows.filter(function (r) { return r.done; }).length;
+            var flagCount = rows.filter(function (r) { return !r.done && r.doneButton; }).length;
             panel.querySelector('#hv-summary').textContent =
-                '收錄 ' + rows.length + ' 條路線，已去過 ' + doneCount + ' 條（逛過的寶石任務頁 + 我的軌跡自動比對）';
+                '收錄 ' + rows.length + ' 條路線，✅ 軌跡確認已去過 ' + doneCount + ' 條' +
+                (flagCount ? '，⚠️ 按鈕標記但沒軌跡 ' + flagCount + ' 條' : '');
             var list = panel.querySelector('#hv-list');
             list.innerHTML = '';
             rows
-                .filter(function (r) { return filter === 'done' ? r.done : filter === 'todo' ? !r.done : true; })
+                .filter(function (r) {
+                    if (filter === 'done') return r.done;
+                    if (filter === 'flag') return !r.done && r.doneButton;
+                    if (filter === 'todo') return !r.done && !r.doneButton;
+                    return true;
+                })
                 .filter(function (r) { return !keyword || (r.title || '').indexOf(keyword) !== -1; })
                 .forEach(function (r) {
                     var row = document.createElement('div');
                     row.className = 'hv-row';
                     var msNames = (r.minisites || []).map(function (m) { return m.split(':').slice(1).join(':'); }).join('、');
-                    var mark = r.done ? (r.doneGpx ? '✅🛰️' : '✅') : '⬜';
+                    var mark = r.done ? '✅' : (r.doneButton ? '⚠️' : '⬜');
                     row.innerHTML =
                         mark + ' <a href="' + (r.url || '#') + '" target="_blank" rel="noopener">' +
                         r.title + '</a><br><small>' + (r.city || '') +
