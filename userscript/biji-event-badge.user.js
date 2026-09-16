@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.20
+// @version      1.0.22
 // @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-16
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
@@ -465,19 +465,52 @@
     }
 
     // ---- 「我的軌跡」頁：用自己上傳過的 GPX 記錄反推「已去過」----
-    // 軌跡標題是站上自動組出來的「活動名+路線名+時間戳」，中間沒有分隔符，
-    // 用已知活動名清單去掉字首、再去掉結尾 12 碼時間戳，剩下拿去對 T 的路線名清單找 id。
+    // 軌跡標題是站上自動組出來的「（縣市－）活動名+路線名+時間戳」，中間沒有分隔符，
+    // 縣市字首有沒有不一定（例如「基隆－台灣百大必訪步道...」），所以找活動名不能限定在
+    // 開頭，整串裡找得到最長的已知活動名就切開來看；再去掉結尾 12 碼時間戳，剩下拿去對
+    // T 的路線名清單找 id。兩邊都先用 norm() 把「臺」轉成「台」再比——站上同一個活動名，
+    // 個人軌跡標題跟寶石任務頁用的是不同的字（「臺」/「台」），不轉的話對不起來。
     // 只在看得到「刪除」按鈕（.btn_remove）時才掃——代表在看自己的軌跡列表，
     // 不會把別人分享頁上的軌跡誤算成自己去過。
-    var EV_BY_NAME_DESC = EV.map(function (ev, i) { return { name: ev[0], idx: i }; })
+    var EV_BY_NAME_DESC = EV.map(function (ev, i) { return { name: norm(ev[0]), idx: i }; })
         .sort(function (a, b) { return b.name.length - a.name.length; });
     var T_NAME_INDEX = null;
     function trailIdByName(name) {
         if (!T_NAME_INDEX) {
             T_NAME_INDEX = {};
-            Object.keys(T).forEach(function (id) { T_NAME_INDEX[T[id][0]] = id; });
+            Object.keys(T).forEach(function (id) { T_NAME_INDEX[norm(T[id][0])] = id; });
         }
         return T_NAME_INDEX[name];
+    }
+
+    // full 是一筆軌跡的標題文字（（縣市－）活動名+路線名+時間戳，或使用者自己改過的任意名稱）。
+    // 解析失敗（找不到任何已知活動名、或路線名對不到 T）就安靜跳過，不影響其他筆。
+    // 回傳 true 代表這筆讓資料庫多標了一條「已去過」（用來決定要不要 saveVisitedDB）。
+    function applyGpxTitleToDB(full, db) {
+        var remainder = norm(full.replace(/\d{12}$/, ''));
+        var evName = null, evAt = -1;
+        for (var i = 0; i < EV_BY_NAME_DESC.length; i++) {
+            var pos = remainder.indexOf(EV_BY_NAME_DESC[i].name);
+            if (pos !== -1) { evName = EV_BY_NAME_DESC[i].name; evAt = pos; break; }
+        }
+        if (!evName) return false;
+        var routeName = remainder.slice(evAt + evName.length);
+        var trailId = trailIdByName(routeName);
+        if (!trailId) return false;
+
+        var prev = db[trailId] || {};
+        if (prev.doneGpx) return false; // 已經標過，不用重存
+        db[trailId] = {
+            title: prev.title || routeName,
+            url: prev.url || (T[trailId] ? T[trailId][2] : null),
+            city: prev.city || (T[trailId] ? T[trailId][1] : ''),
+            done: true,
+            doneGpx: true,
+            doneButton: prev.doneButton || false,
+            lastSeen: prev.lastSeen || new Date().toISOString(),
+            minisites: prev.minisites || []
+        };
+        return true;
     }
 
     function scanMyGpxPage() {
@@ -485,41 +518,72 @@
         if (qs.get('q') !== 'member' || qs.get('act') !== 'gpx') return;
         if (!document.querySelector('.btn_remove')) return; // 不是自己的軌跡列表，不猜
 
+        // 記住自己的會員 id：之後在站上任何一頁都能背景同步「我的軌跡」，
+        // 不用每次都手動跑回這頁翻頁。
+        var selfId = qs.get('member');
+        if (selfId) { try { GM_setValue('hbiji_self_id', selfId); } catch (e) {} }
+
         var items = document.querySelectorAll('li.member-ugc-item');
         if (!items.length) return;
         var db = loadVisitedDB();
         var changed = false;
-
         items.forEach(function (li) {
             var titleLink = li.querySelector('a.truncate');
-            if (!titleLink) return;
-            var full = titleLink.textContent.trim();
-            var remainder = full.replace(/\d{12}$/, '');
-            var evMatch = null;
-            for (var i = 0; i < EV_BY_NAME_DESC.length; i++) {
-                if (remainder.indexOf(EV_BY_NAME_DESC[i].name) === 0) { evMatch = EV_BY_NAME_DESC[i]; break; }
-            }
-            if (!evMatch) return;
-            var routeName = remainder.slice(evMatch.name.length);
-            var trailId = trailIdByName(routeName);
-            if (!trailId) return;
-
-            var prev = db[trailId] || {};
-            if (prev.doneGpx) return; // 已經標過，不用重存也不用觸發 changed
-            db[trailId] = {
-                title: prev.title || routeName,
-                url: prev.url || (T[trailId] ? T[trailId][2] : null),
-                city: prev.city || (T[trailId] ? T[trailId][1] : ''),
-                done: true,
-                doneGpx: true,
-                doneButton: prev.doneButton || false,
-                lastSeen: prev.lastSeen || new Date().toISOString(),
-                minisites: prev.minisites || []
-            };
-            changed = true;
+            if (titleLink && applyGpxTitleToDB(titleLink.textContent.trim(), db)) changed = true;
         });
-
         if (changed) saveVisitedDB(db);
+    }
+
+    // ---- 背景同步「我的軌跡」全部分頁，上傳新軌跡後不用手動翻頁 ----
+    // 用 fetch 直接打站上同一支頁面（同網域、帶登入 cookie，跟手動點分頁沒兩樣，
+    // 不是另開一個帳號操作），解析回傳 HTML 抓標題，一頁一頁翻到抓不到資料為止。
+    var GPX_SYNC_TS_KEY = 'hbiji_gpx_sync_ts';
+    var GPX_SYNC_THROTTLE_MS = 30 * 60 * 1000; // 30 分鐘內背景同步過就不重打，避免每頁都發一輪請求
+
+    function fetchGpxPageTitles(selfId, page) {
+        return fetch('/index.php?q=member&act=gpx&member=' + selfId + '&page=' + page, { credentials: 'same-origin' })
+            .then(function (res) { return res.ok ? res.text() : ''; })
+            .then(function (html) {
+                if (!html) return [];
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+                if (!doc.querySelector('.btn_remove')) return []; // 保險：抓回來的不是自己看得到刪除鈕的頁面就不採用
+                var links = doc.querySelectorAll('li.member-ugc-item a.truncate');
+                return Array.prototype.map.call(links, function (a) { return a.textContent.trim(); });
+            })
+            .catch(function () { return []; });
+    }
+
+    function syncMyGpxAllPages(force) {
+        var selfId = null;
+        try { selfId = GM_getValue('hbiji_self_id', null); } catch (e) {}
+        if (!selfId) return Promise.resolve({ synced: false, reason: 'unknown-self' });
+
+        if (!force) {
+            var lastTs = 0;
+            try { lastTs = GM_getValue(GPX_SYNC_TS_KEY, 0); } catch (e) {}
+            if (Date.now() - lastTs < GPX_SYNC_THROTTLE_MS) return Promise.resolve({ synced: false, reason: 'throttled' });
+        }
+        try { GM_setValue(GPX_SYNC_TS_KEY, Date.now()); } catch (e) {}
+
+        var db = loadVisitedDB();
+        var changed = false;
+        var newlyMatched = 0;
+        var MAX_PAGES = 40; // 安全上限，正常帳號用不到這麼多分頁
+
+        function nextPage(page) {
+            return fetchGpxPageTitles(selfId, page).then(function (titles) {
+                if (!titles.length || page > MAX_PAGES) return page - 1;
+                titles.forEach(function (t) {
+                    if (applyGpxTitleToDB(t, db)) { changed = true; newlyMatched++; }
+                });
+                return nextPage(page + 1);
+            });
+        }
+
+        return nextPage(1).then(function (lastPage) {
+            if (changed) saveVisitedDB(db);
+            return { synced: true, pages: lastPage, newlyMatched: newlyMatched };
+        });
     }
 
     function showVisitedPanel() {
@@ -536,6 +600,7 @@
             '<button type="button" data-f="flag">⚠️ 按鈕標記無軌跡</button>' +
             '<button type="button" data-f="todo">⬜ 未去過</button>' +
             '<input id="hv-search" placeholder="搜尋路線名稱…">' +
+            '<button type="button" id="hv-sync">🔄 立即同步軌跡</button>' +
             '<button type="button" id="hv-export">匯出 JSON</button>' +
             '</div>' +
             '<div id="hv-list"></div>';
@@ -547,6 +612,20 @@
             a.href = URL.createObjectURL(blob);
             a.download = 'hiking-biji-visited.json';
             a.click();
+        });
+        panel.querySelector('#hv-sync').addEventListener('click', function () {
+            var syncBtn = panel.querySelector('#hv-sync');
+            syncBtn.disabled = true;
+            syncBtn.textContent = '同步中…';
+            syncMyGpxAllPages(true).then(function (result) {
+                syncBtn.disabled = false;
+                syncBtn.textContent = '🔄 立即同步軌跡';
+                if (!result.synced && result.reason === 'unknown-self') {
+                    alert('還沒記住你的會員 id，先打開一次「我的軌跡」頁面（q=member&act=gpx）讓腳本認出來，之後才能在任何頁面按這顆按鈕同步。');
+                    return;
+                }
+                render();
+            });
         });
 
         var filter = 'all', keyword = '';
@@ -617,6 +696,7 @@
         scanVisitedCards();
         scanMyGpxPage();
         initVisitedButton();
+        syncMyGpxAllPages(false); // 背景節流同步，不管現在在站上哪一頁；沒記住 id 或還沒過節流時間就直接跳過
     }
 
     run();
