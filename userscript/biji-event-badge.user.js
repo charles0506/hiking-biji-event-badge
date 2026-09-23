@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.26
+// @version      1.0.27
 // @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-24
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
@@ -143,6 +143,9 @@
             var b = document.createElement('a');
             b.className = 'hbadge ' + st.cls;
             b.style.background = ev[4]; // 每個活動固定一色，不同任務類型一眼分出來
+            // 文字色直接寫在元素上（inline !important），站上/面板任何「連結藍色」樣式規則都蓋不掉，
+            // 不靠樣式表優先級。深色底＋藍字看不到字就是被那種規則蓋的。
+            b.style.setProperty('color', '#fff', 'important');
             b.dataset.hbadgeDone = '1'; // 防呆：別讓自己插的徽章又被當成步道連結重標一次
             b.href = trailUrl || ('https://hiking.biji.co/index.php?q=minisite&id=' + ev[3]);
             b.target = '_blank';

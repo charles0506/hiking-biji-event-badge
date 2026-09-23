@@ -143,6 +143,9 @@
             var b = document.createElement('a');
             b.className = 'hbadge ' + st.cls;
             b.style.background = ev[4]; // 每個活動固定一色，不同任務類型一眼分出來
+            // 文字色直接寫在元素上（inline !important），站上/面板任何「連結藍色」樣式規則都蓋不掉，
+            // 不靠樣式表優先級。深色底＋藍字看不到字就是被那種規則蓋的。
+            b.style.setProperty('color', '#fff', 'important');
             b.dataset.hbadgeDone = '1'; // 防呆：別讓自己插的徽章又被當成步道連結重標一次
             b.href = trailUrl || ('https://hiking.biji.co/index.php?q=minisite&id=' + ev[3]);
             b.target = '_blank';
