@@ -73,6 +73,9 @@
         'border-radius:10px;color:#fff;white-space:nowrap;cursor:pointer;' +
         'text-decoration:none}' +
         '.hbadge:hover{filter:brightness(1.15);text-decoration:underline}' +
+        // 徽章是 <a>，站上跟面板自己的「連結藍色」規則（例如 #hpanel-nearby a{color:#1a6fd1}）
+        // 優先級比 .hbadge 高，會把白字蓋成藍字，深色底上根本看不到。文字色強制白色。
+        'a.hbadge,a.hbadge:link,a.hbadge:visited,a.hbadge:hover,a.hbadge:active{color:#fff !important;text-shadow:0 1px 1px rgba(0,0,0,.35)}' +
         // 背景色＝哪個活動（inline style 直接指定，見 makeBadgeWrap）。
         // 這裡的 hst-* 只調狀態的「視覺份量」，不蓋掉顏色，兩種資訊分開看：
         '.hst-soon{opacity:.8;border:1px dashed rgba(255,255,255,.75)}' +
