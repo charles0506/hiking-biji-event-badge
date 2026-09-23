@@ -90,6 +90,8 @@
         '#hpanel-nearby a:hover{text-decoration:underline}' +
         '#hpanel-nearby .hp-close{float:right;cursor:pointer;color:#888}' +
         '#hpanel-nearby .hp-controls{display:flex;gap:6px;margin:6px 0 8px}' +
+        '#hpanel-nearby .hp-note{display:block;color:#666;font-size:11px;line-height:1.5;margin:2px 0}' +
+        '#hpanel-nearby .hp-more{width:100%;margin:8px 0 2px;padding:5px;cursor:pointer;border:1px solid #ccc;border-radius:4px;background:#f5f5f5}' +
         '#hp-county-select{flex:1;padding:4px 6px;font-size:13px}' +
         '#hp-locate{flex:0 0 auto;padding:4px 8px;cursor:pointer;' +
         'border:1px solid #ccc;border-radius:4px;background:#f5f5f5}' +
@@ -263,7 +265,16 @@
         });
     }
 
-    // ---- 附近任務浮動按鈕：直接查索引，跟目前在哪一頁無關 ----
+    // ---- 附近任務浮動按鈕 ----
+    // 預設看「當下這一頁的步道」附近有哪些進行中的任務：
+    //   步道詳細頁 → 直接讀該頁「所在縣市」；GPX 軌跡頁 → 用它引用的那條步道。
+    // 沒有步道可參考的頁面（首頁、活動專區…）才退回下拉選單自己選鄉鎮市區。
+    // 「附近」＝鄉鎮市區中心點距離 NEARBY_KM 以內（同鄉鎮優先），不是步道實際座標，僅供參考；
+    // 該步道若有 GPX 精算過的「沿途任務路線」（OV），那幾條排最前面。
+    var NEARBY_KM = 10;
+    var DCMAP = {};
+    DC.forEach(function (d) { DCMAP[norm(d[0])] = [d[1], d[2]]; });
+
     function activeEvIdx(idxList) {
         return idxList.filter(function (i) {
             var ev = EV[i];
@@ -274,22 +285,115 @@
         });
     }
 
-    function findNearbyTrails(county) {
-        var nc = norm(county);
+    function splitDistricts(s) {
+        return s.split(/[,，、]/).map(function (x) { return norm(x.trim()); }).filter(Boolean);
+    }
+
+    // 鄉鎮沒座標（DC 只收任務步道出現過的鄉鎮）就用同縣市已知鄉鎮的平均位置湊合。
+    function centerOf(name) {
+        var n = norm(name);
+        if (DCMAP[n]) return DCMAP[n];
+        var county = n.slice(0, 3), sx = 0, sy = 0, c = 0;
+        DC.forEach(function (d) {
+            if (norm(d[0]).slice(0, 3) === county) { sx += d[1]; sy += d[2]; c++; }
+        });
+        return c ? [sx / c, sy / c] : null;
+    }
+
+    function distKm(a, b) {
+        var R = 6371, rad = Math.PI / 180;
+        var dLat = (b[0] - a[0]) * rad, dLng = (b[1] - a[1]) * rad;
+        var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    // 手動選鄉鎮市區：城市字串裡有這個鄉鎮名就算。
+    function findNearbyTrails(district) {
+        var nd = norm(district);
         var rows = [];
         Object.keys(T).forEach(function (tid) {
             var rec = T[tid]; // [名稱, 縣市, 連結, [EV索引,...]]
-            if (norm(rec[1]).indexOf(nc) === -1) return;
+            if (norm(rec[1]).indexOf(nd) === -1) return;
             var idx = activeEvIdx(rec[3]);
             if (!idx.length) return;
-            rows.push({ name: rec[0], url: rec[2], evs: idx.map(function (i) { return EV[i][0]; }) });
+            rows.push({ id: tid, name: rec[0], url: rec[2], idx: idx });
         });
         return rows;
     }
 
-    // 地區用下拉選單自己選（照縣市分組，組內是鄉鎮），不強迫用定位——
-    // 選了就記住，下次開面板直接帶出來。想用定位也行，面板裡有顆 📍 按鈕，
-    // 按了才問權限，不會一開面板就跳定位提示。
+    // 以當下頁面的步道為中心找附近任務。km：-1＝GPX 確認路線上、0＝同鄉鎮、其餘＝鄉鎮中心點距離。
+    function findNearPageTrails(ctx) {
+        var mine = ctx.districts.map(function (d) { return { name: d, c: centerOf(d) }; });
+        var confirmed = (ctx.id && OV[ctx.id]) ? OV[ctx.id] : [];
+        var rows = [];
+        Object.keys(T).forEach(function (tid) {
+            if (tid === ctx.id) return;
+            var rec = T[tid];
+            var idx = activeEvIdx(rec[3]);
+            if (!idx.length) return;
+            var best = Infinity;
+            splitDistricts(rec[1]).forEach(function (d) {
+                var c = centerOf(d);
+                mine.forEach(function (m) {
+                    if (m.name === d) { best = 0; return; }
+                    if (c && m.c) { var k = distKm(c, m.c); if (k < best) best = k; }
+                });
+            });
+            var onRoute = confirmed.indexOf(tid) !== -1;
+            if (!onRoute && best > NEARBY_KM) return;
+            rows.push({ id: tid, name: rec[0], url: rec[2], idx: idx, km: onRoute ? -1 : best });
+        });
+        rows.sort(function (a, b) { return a.km - b.km || a.name.localeCompare(b.name); });
+        return rows;
+    }
+
+    // 步道詳細頁有一行 <dt>所在縣市</dt><dd>臺北市士林區,新北市…</dd>
+    function readLocationDd(root) {
+        var dts = root.querySelectorAll('dt');
+        for (var i = 0; i < dts.length; i++) {
+            if (dts[i].textContent.trim() === '所在縣市') {
+                var dd = dts[i].nextElementSibling;
+                if (dd) return dd.textContent.trim();
+            }
+        }
+        return '';
+    }
+
+    // 取得當下頁面對應的步道（名稱、id、所在鄉鎮）；不是步道相關頁面就給 null。
+    function getPageContext(cb) {
+        var qs = new URLSearchParams(location.search);
+        if (qs.get('q') !== 'trail') { cb(null); return; }
+        var act = qs.get('act'), id = null, name = '';
+        if (act === 'detail') {
+            id = qs.get('id');
+            var h1 = document.querySelector('h1.text-3xl.font-bold') || document.querySelector('h1');
+            name = h1 ? h1.textContent.trim() : '';
+            var loc = readLocationDd(document);
+            if (loc) { cb({ id: id, name: name, districts: splitDistricts(loc) }); return; }
+        } else if (act === 'gpx_detail') {
+            var links = document.querySelectorAll('a[href*="q=trail&act=detail&id="]');
+            for (var i = 0; i < links.length; i++) {
+                var a = links[i];
+                if (a.closest('.hbadge-wrap, .hoverlap, #hpanel-nearby')) continue;
+                var m = a.getAttribute('href').match(/[?&]id=(\d+)/);
+                if (m) { id = m[1]; name = a.textContent.trim(); break; }
+            }
+        }
+        if (!id) { cb(null); return; }
+        if (T[id]) { cb({ id: id, name: name || T[id][0], districts: splitDistricts(T[id][1]) }); return; }
+        // 不在任務索引裡的步道：同源抓那一頁，讀它的「所在縣市」
+        fetch('/index.php?q=trail&act=detail&id=' + id, { credentials: 'same-origin' })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+                var loc2 = readLocationDd(doc);
+                cb(loc2 ? { id: id, name: name, districts: splitDistricts(loc2) } : null);
+            })
+            .catch(function () { cb(null); });
+    }
+
+    // 下拉選單照縣市分組、組內是鄉鎮；定位按鈕按了才問權限，不會一開面板就跳定位提示。
     function buildDistrictOptions(selected) {
         return districtGroups().map(function (g) {
             var county = g[0], names = g[1];
@@ -303,64 +407,128 @@
         }).join('');
     }
 
-    function showNearbyPanel(initialDistrict) {
+    // 列表用 DOM 組，標題連結先標記「已處理」、徽章自己掛，
+    // 不然 tagLinksOnPage 會在面板裡的標題連結後面再多掛一排徽章。
+    function renderRows(body, rows, noteFn) {
+        body.textContent = '';
+        rows.forEach(function (r) {
+            var div = document.createElement('div');
+            div.className = 'hp-item';
+            var a = document.createElement('a');
+            a.href = r.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+            a.textContent = r.name;
+            a.dataset.hbadgeDone = '1';
+            div.appendChild(a);
+            if (noteFn) {
+                var s = document.createElement('small');
+                s.className = 'hp-note';
+                s.textContent = noteFn(r);
+                div.appendChild(s);
+            }
+            var wrap = makeBadgeWrap(r.idx, r.url);
+            if (wrap) div.appendChild(wrap);
+            body.appendChild(div);
+        });
+    }
+
+    function showNearbyPanel() {
         var old = document.getElementById('hpanel-nearby');
         if (old) old.remove();
         var panel = document.createElement('div');
         panel.id = 'hpanel-nearby';
-
         panel.innerHTML =
             '<span class="hp-close">✕</span><h3>附近任務</h3>' +
             '<div class="hp-controls">' +
-            '<select id="hp-district-select"><option value="">請選擇鄉鎮市區…</option>' +
-            buildDistrictOptions(initialDistrict) + '</select>' +
+            '<select id="hp-district-select"></select>' +
             '<button type="button" id="hp-locate" title="用瀏覽器定位自動選地區">📍</button>' +
             '</div>' +
-            '<div id="hp-body"></div>';
+            '<div id="hp-body"><div>讀取本頁資訊…</div></div>';
         document.body.appendChild(panel);
         panel.querySelector('.hp-close').addEventListener('click', function () { panel.remove(); });
 
         var body = panel.querySelector('#hp-body');
         var select = panel.querySelector('#hp-district-select');
 
-        function renderList(district) {
-            if (!district) {
-                body.innerHTML = '<div>選個鄉鎮市區，或按右邊 📍 用目前位置。</div>';
-                return;
-            }
-            var list = findNearbyTrails(district);
-            if (!list.length) {
-                body.innerHTML = '<div>' + district + ' 目前沒有進行中的活動路線。</div>';
-                return;
-            }
-            body.innerHTML = list.map(function (r) {
-                return '<div class="hp-item"><a href="' + r.url + '" target="_blank" rel="noopener">' + r.name +
-                    '</a><br><small>' + r.evs.join('、') + '</small></div>';
-            }).join('');
-        }
+        getPageContext(function (ctx) {
+            if (!panel.isConnected) return;
+            var last = null;
+            try { last = GM_getValue('hbiji_last_place', null); } catch (e) {}
 
-        select.addEventListener('change', function () {
-            try { GM_setValue('hbiji_last_place', select.value); } catch (e) {}
-            renderList(select.value);
+            var head = ctx
+                ? '<option value="__page__">本頁附近：' +
+                  (ctx.name.length > 14 ? ctx.name.slice(0, 14) + '…' : ctx.name) + '</option>' +
+                  '<option value="">── 改選其他鄉鎮市區 ──</option>'
+                : '<option value="">請選擇鄉鎮市區…</option>';
+            select.innerHTML = head + buildDistrictOptions(ctx ? '' : last);
+
+            function renderFor(value) {
+                if (value === '__page__') {
+                    var rows = findNearPageTrails(ctx);
+                    if (!rows.length) {
+                        body.innerHTML = '<div>「' + ctx.name + '」' + NEARBY_KM + ' 公里內沒有進行中的任務。</div>';
+                        return;
+                    }
+                    var noteFn = function (r) {
+                        return r.km < 0 ? '🥾 路線上（GPX 比對）' : (r.km === 0 ? '同鄉鎮' : '約 ' + Math.round(r.km) + ' 公里');
+                    };
+                    var PAGE_SIZE = 20;
+                    var paint = function (n) {
+                        renderRows(body, rows.slice(0, n), noteFn);
+                        var tip = document.createElement('div');
+                        tip.className = 'hp-note';
+                        tip.textContent = '以「' + ctx.name + '」所在鄉鎮（' + ctx.districts.join('、') + '）為準，' +
+                            NEARBY_KM + ' 公里內共 ' + rows.length + ' 條，由近到遠；距離為鄉鎮中心點，僅供參考。';
+                        body.insertBefore(tip, body.firstChild);
+                        if (rows.length > n) {
+                            var more = document.createElement('button');
+                            more.type = 'button';
+                            more.className = 'hp-more';
+                            more.textContent = '顯示更多（還有 ' + (rows.length - n) + ' 條）';
+                            more.addEventListener('click', function () { paint(n + PAGE_SIZE); });
+                            body.appendChild(more);
+                        }
+                    };
+                    paint(PAGE_SIZE);
+                    return;
+                }
+                if (!value) {
+                    body.innerHTML = '<div>選個鄉鎮市區，或按右邊 📍 用目前位置。</div>';
+                    return;
+                }
+                var list = findNearbyTrails(value);
+                if (!list.length) {
+                    body.innerHTML = '<div>' + value + ' 目前沒有進行中的活動路線。</div>';
+                    return;
+                }
+                renderRows(body, list, null);
+            }
+
+            select.addEventListener('change', function () {
+                if (select.value && select.value !== '__page__') {
+                    try { GM_setValue('hbiji_last_place', select.value); } catch (e) {}
+                }
+                renderFor(select.value);
+            });
+
+            panel.querySelector('#hp-locate').addEventListener('click', function () {
+                if (!navigator.geolocation) {
+                    body.innerHTML = '<div>瀏覽器不支援定位，手動選地區即可。</div>';
+                    return;
+                }
+                body.innerHTML = '<div>定位中…</div>';
+                navigator.geolocation.getCurrentPosition(function (pos) {
+                    var district = nearestDistrict(pos.coords.latitude, pos.coords.longitude);
+                    select.value = district;
+                    try { GM_setValue('hbiji_last_place', district); } catch (e) {}
+                    renderFor(district);
+                }, function (err) {
+                    body.innerHTML = '<div>定位失敗（' + err.message + '），手動選地區即可。</div>';
+                }, { timeout: 8000 });
+            });
+
+            if (ctx) { select.value = '__page__'; renderFor('__page__'); }
+            else { select.value = last || ''; renderFor(select.value); }
         });
-
-        panel.querySelector('#hp-locate').addEventListener('click', function () {
-            if (!navigator.geolocation) {
-                body.innerHTML = '<div>瀏覽器不支援定位，手動選地區即可。</div>';
-                return;
-            }
-            body.innerHTML = '<div>定位中…</div>';
-            navigator.geolocation.getCurrentPosition(function (pos) {
-                var district = nearestDistrict(pos.coords.latitude, pos.coords.longitude);
-                select.value = district;
-                try { GM_setValue('hbiji_last_place', district); } catch (e) {}
-                renderList(district);
-            }, function (err) {
-                body.innerHTML = '<div>定位失敗（' + err.message + '），手動選地區即可。</div>';
-            }, { timeout: 8000 });
-        });
-
-        renderList(initialDistrict);
     }
 
     function initNearbyButton() {
@@ -369,9 +537,9 @@
         btn.id = 'hbtn-nearby';
         btn.textContent = '📍 附近任務';
         btn.addEventListener('click', function () {
-            var last = null;
-            try { last = GM_getValue('hbiji_last_place', null); } catch (e) {}
-            showNearbyPanel(last || '');
+            var open = document.getElementById('hpanel-nearby');
+            if (open) { open.remove(); return; }
+            showNearbyPanel();
         });
         document.body.appendChild(btn);
     }
