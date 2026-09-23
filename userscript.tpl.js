@@ -708,6 +708,52 @@
         if (changed) saveVisitedDB(db);
     }
 
+    // ---- 步道詳細頁：這條我去過沒？----
+    // 跟寶石任務頁卡片同一份資料庫（GPX 軌跡佐證才算已去過，站上「去過」按鈕是手動點的不準）。
+    // 軌跡標題只對得回任務索引（T）裡的路線，索引外的步道沒辦法判斷，所以不顯示。
+    function tagVisitedOnDetailPage() {
+        var qs = new URLSearchParams(location.search);
+        if (qs.get('q') !== 'trail' || qs.get('act') !== 'detail') return;
+        var id = qs.get('id');
+        if (!id || !T[id]) return;
+        var h1 = document.querySelector('h1.text-3xl.font-bold') || document.querySelector('h1');
+        if (!h1) return;
+
+        var rec = loadVisitedDB()[id];
+        var selfId = null, lastSync = 0;
+        try { selfId = GM_getValue('hbiji_self_id', null); lastSync = GM_getValue(GPX_SYNC_TS_KEY, 0); } catch (e) {}
+
+        var state, text, color, tip;
+        if (rec && rec.doneGpx) {
+            state = 'gpx'; text = '✅ 已去過（軌跡佐證）'; color = '#2e7d32';
+            tip = '你上傳過符合這條路線的軌跡';
+        } else if (selfId && lastSync) {
+            state = 'none'; text = '⬜ 軌跡紀錄裡沒有這條'; color = '#616161';
+            tip = '「我的軌跡」已同步過，沒找到符合這條路線的軌跡（去過但沒上傳，或軌跡標題被你改過，就對不到）';
+        } else {
+            state = 'nosync'; text = '❔ 尚未同步「我的軌跡」'; color = '#455a64';
+            tip = '登入後打開一次「我的軌跡」頁，腳本會記住你的會員 id 並自動同步，之後每一頁都能判斷';
+        }
+
+        var box = document.querySelector('.hvt-detail');
+        if (box && box.dataset.hvtState === state) return; // 狀態沒變就不動，避免 MutationObserver 迴圈
+        if (!box) {
+            box = document.createElement('div');
+            box.className = 'hvt-detail';
+            box.style.margin = '4px 0';
+            var chip0 = document.createElement('span');
+            chip0.className = 'hvt-chip';
+            box.appendChild(chip0);
+            h1.insertAdjacentElement('afterend', box);
+        }
+        box.dataset.hvtState = state;
+        var chip = box.querySelector('.hvt-chip');
+        chip.textContent = text;
+        chip.title = tip;
+        chip.style.background = color;
+        chip.style.setProperty('color', '#fff', 'important');
+    }
+
     // ---- 背景同步「我的軌跡」全部分頁，上傳新軌跡後不用手動翻頁 ----
     // 用 fetch 直接打站上同一支頁面（同網域、帶登入 cookie，跟手動點分頁沒兩樣，
     // 不是另開一個帳號操作），解析回傳 HTML 抓標題，一頁一頁翻到抓不到資料為止。
@@ -869,8 +915,11 @@
         initNearbyButton();
         scanVisitedCards();
         scanMyGpxPage();
+        tagVisitedOnDetailPage();
         initVisitedButton();
-        syncMyGpxAllPages(false); // 背景節流同步，不管現在在站上哪一頁；沒記住 id 或還沒過節流時間就直接跳過
+        // 背景節流同步，不管現在在站上哪一頁；沒記住 id 或還沒過節流時間就直接跳過。
+        // 真的同步完才回頭刷新步道頁的「已去過」標示（同步不會動 DOM，MutationObserver 不會幫忙）。
+        syncMyGpxAllPages(false).then(function (r) { if (r && r.synced) tagVisitedOnDetailPage(); });
     }
 
     run();
