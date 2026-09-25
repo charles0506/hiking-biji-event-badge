@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         健行筆記 活動/寶石任務提示
 // @namespace    https://claudeD.local/hiking-biji
-// @version      1.0.28
-// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-24
+// @version      1.0.29
+// @description  在 hiking.biji.co 步道頁標出「這條路線屬於哪個線上活動」，提供附近縣市進行中任務清單，並彙整寶石任務頁「去過此路線」狀態與「我的軌跡」自動比對出的已去過路線。索引產生日：2026-09-25
 // @author       lawyer413
 // @match        https://hiking.biji.co/*
 // @updateURL    https://raw.githubusercontent.com/charles0506/hiking-biji-event-badge/master/userscript/biji-event-badge.user.js
@@ -907,6 +907,29 @@
         document.body.appendChild(btn);
     }
 
+    // ---- 地圖預設魯地圖 ----
+    // 站上換底圖是靠 body 上的 change 事件（input[name=layer_item]），所以這裡把「魯地圖」那顆
+    // radio 選起來再丟一個 change 事件，等於使用者自己點了一次。
+    // 不同頁面選項順序不一樣（GPX 頁魯地圖是第 2 個、步道頁是第 5 個），所以用文字找，不寫死位置。
+    // 地圖真的畫出來（有載入完的圖磚）才切，不然站上自己的切換函式會撞到還沒建好的地圖物件；
+    // 只自動切一次，之後使用者自己換別的底圖就尊重他。
+    var rudyApplied = false;
+    function applyDefaultRudyMap() {
+        if (rudyApplied) return;
+        var radios = document.querySelectorAll('input[name="layer_item"]');
+        if (!radios.length) return;
+        if (!document.querySelector('.leaflet-container .leaflet-tile-loaded')) return;
+        var target = null;
+        radios.forEach(function (r) {
+            var label = r.closest('label');
+            if (label && label.textContent.indexOf('魯地圖') !== -1) target = r;
+        });
+        rudyApplied = true;
+        if (!target || target.checked) return;
+        target.checked = true;
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
     function run() {
         var qs = new URLSearchParams(location.search);
         var isGpxDetail = qs.get('q') === 'trail' && qs.get('act') === 'gpx_detail';
@@ -916,6 +939,7 @@
         scanVisitedCards();
         scanMyGpxPage();
         tagVisitedOnDetailPage();
+        applyDefaultRudyMap();
         initVisitedButton();
         // 背景節流同步，不管現在在站上哪一頁；沒記住 id 或還沒過節流時間就直接跳過。
         // 真的同步完才回頭刷新步道頁的「已去過」標示（同步不會動 DOM，MutationObserver 不會幫忙）。
